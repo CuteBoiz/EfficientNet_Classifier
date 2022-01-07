@@ -95,7 +95,7 @@ def train(args):
 
 	#Load Data 
 	train_file = os.path.join(args.data_path, "train.txt")
-	valid_file = os.path.join(args.data_path, "train.txt")
+	valid_file = os.path.join(args.data_path, "valid.txt")
 	label_file = os.path.join(args.data_path, "label.txt")
 	assert os.path.isfile(train_file), '[ERROR] Could not found train.txt in {}'.format(args.data_path)
 	assert os.path.isfile(valid_file), '[ERROR] Could not found valid.txt in {}'.format(args.data_path)
