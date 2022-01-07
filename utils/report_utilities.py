@@ -1,11 +1,9 @@
 '''
-Training ultilities.
 
 author: phatnt
 date modified: 2021-09-06
 '''
 
-import shutil
 import numpy as np
 import os
 import torch
@@ -26,95 +24,6 @@ def softmax(x):
 	e_x = np.exp(x - np.max(x))
 	return e_x / e_x.sum(axis=0)
 
-def save_checkpoint(state, saved_path, is_best_loss, is_best_acc):
-	'''
-		Save training model in a specific folder.
-		Args:
-			state: torch state dict.
-			saved_path: model saved place.
-			is_best_loss: is this model reach lowest loss?
-			is_best_acc: is this model reach highest accuracy on valid set?
-	'''
-	assert state is not None, '[ERROR]: state dict is none!'
-	os.makedirs(saved_path, exist_ok=True)
-
-	saved_file = os.path.join(saved_path, 'model_last.pth') 
-	torch.save(state, saved_file)
-	if is_best_loss:
-		shutil.copyfile(saved_file, saved_file.replace('last', 'best_loss'))
-	if is_best_acc:
-		shutil.copyfile(saved_file, saved_file.replace('last', 'best_acc'))
-
-def get_class_weight(train_file, nrof_classes):
-	'''
-		Get class weight array.
-		Args: 
-			train_file: txt file with format ("image_path", label_id) each line.
-			nrof_classes: number of training classes.
-		Return:
-			An class weight array (length = nrof_classes)
-	'''
-	assert os.path.isfile(train_file), '[ERROR]: {} not found!'.format(train_file)
-	assert isinstance(nrof_classes, int) and nrof_classes >= 0, '[ERROR]: nrof_classes is not valid!'
-	
-	#Count quantity of each class
-	class_quantities = np.zeros(nrof_classes, dtype=np.int32)
-	class_weights = []
-	with open(train_file, 'r') as f:
-		lines = f.readlines()
-	for line in lines:
-		line = line.strip()
-		target = int(line.split("\"")[2].strip())
-		assert target < nrof_classes
-		class_quantities[target]+=1
-
-	#Caculate class-weight
-	for quantity in class_quantities:
-		cls_weight = np.sum(class_quantities)/(nrof_classes*quantity)
-		class_weights.append(cls_weight)
-
-	print('[INFO]: Class Quantities:', class_quantities)
-	print('[INFO]: Class Weight:', class_weights)
-	return class_weights
-
-def adjust_learning_rate(optimizer, epoch, args):
-	'''
-		Sets the learning rate to the initial LR decayed by 10 every 30 epochs.
-		Args:
-			optimizer: training optimizer.
-	'''
-	lr = args.lr * (0.1 ** (epoch // 5))
-	for param_group in optimizer.param_groups:
-		param_group['lr'] = lr
-
-def evaluate(val_loader, model, device):
-	'''
-		Caculate Accuracy from validation set.
-		Args:
-			val_loader: torch dataloader format.
-			model: Efficient training model.
-			device: current training gpu.
-		Return:
-			accuracy: Accuracy of model base on validation set.
-	'''
-	model.eval()
-	True_Cases = 0
-	Cases = 0
-	with torch.no_grad():
-		for i, sample_batched in enumerate(val_loader):
-			images = sample_batched['image']
-			target = sample_batched['target']
-			images = images.to(device=device, dtype=torch.float)
-
-			output = model(images)
-			output = output.cpu().data.numpy().argmax(axis=1)
-			target = np.array(target)
-			for i in range(len(output)):
-				Cases += 1
-				if int(output[i]) == int(target[i]):
-					True_Cases += 1
-		accuracy = (True_Cases/Cases)*100
-	return accuracy
 
 def get_cofusion_matrix(evaluate_dict):
 	'''
@@ -239,6 +148,14 @@ def set_cols(sheet, list_col_width):
 			
 
 def create_report(data_folder, evaluate_dict, report_save_dir):
+	'''
+	Create report sheets.
+		+ Sheet 1: Confusion matrix.
+		+ Sheet 2: Quantities (train/val/test).
+		+ Sheet 3: Underkill images.
+
+	'''
+
 	train_classes = evaluate_dict['train_classes']
 	thresholds = evaluate_dict['thresholds']
 
@@ -344,8 +261,8 @@ def create_report(data_folder, evaluate_dict, report_save_dir):
 	row_header_2_2.append(np.sum(total_quantities))
 	row_header_2_2.extend(np.sum(total_quantities, axis=1))
 	sheet2.write_row(3+len(train_classes), 1, row_header_2_2, header_format)
-	#SHEET 3
 
+	#SHEET 3
 	sheet3.set_column('C:I', 34)
 	sheet3.freeze_panes(2, 2)
 	row_header_3 = ['No', 'False Defects', 'Ground True Label', 'Predicted Label', 'GT Class Score' , 'Highest Predicted Score','Image Path' ]
