@@ -14,7 +14,7 @@ import numpy as np
 from Efnet.model import EfficientNet
 from utils.custom_dataset import CustomDataset, Normalize, ToTensor, Resize
 from utils.train_utilities import  get_class_weight, train_eff
-from utils.report_utilities import create_report
+from utils.report_utilities import create_report, softmax
 
 import torch
 import torchvision.transforms as transforms
@@ -67,6 +67,7 @@ def prepare_arguments():
 	infer_parser.add_argument("--weight", type=str, required=True)
 	infer_parser.add_argument("--data", type=str, required=True)
 	infer_parser.add_argument("--batch_size", type=int, default=1)
+	infer_parser.add_argument("--softmax", action='store_true', default=False)
 
 	return parser.parse_args()
 	
@@ -271,15 +272,15 @@ def infer(args):
 		elif extentions in ['mp4', 'mov', 'wmv', 'mkv', 'avi', 'flv']:
 			cap = cv2.VideoCapture(args.data)
 			if (cap.isOpened()== False):
-  				print("Error opening video stream or file")
+  				assert Exception("[ERROR] Error opening video stream or file")
 			while(cap.isOpened()):
 				ret, frame = cap.read()
 				if ret == True:
 					images.append(frame)
 				else: 
 					break
-	if os.path.isdir(args.data):
-		files = glob.glob(os.path.join(args.data, '*'))
+	elif os.path.isdir(args.data):
+		files = sorted(glob.glob(os.path.join(args.data, '*')))
 		for file in files:
 			extentions = file.split('.')[-1]
 			if extentions in ['jpg', 'png', 'bmp', 'jpeg']:
@@ -288,8 +289,12 @@ def infer(args):
 				images.append(image)
 			else:
 				continue
+	else:
+		raise Exception(f"[ERROR] Could not load data from {args.data}")
+
 	with torch.no_grad():
 		for image in images:
+			image = cv2.resize(image, (image_size, image_size), interpolation = cv2.INTER_AREA)
 			image = np.float32(image)
 			image = image*(1/255)
 			mean = [0.485, 0.456, 0.406]
@@ -299,7 +304,9 @@ def infer(args):
 			image = np.asarray([image]).astype(np.float32)
 			image = torch.from_numpy(image).to(device=device, dtype=torch.float)
 			
-			prediction = model(image)
+			prediction = np.squeeze(model(image).cpu().numpy())
+			if args.softmax:
+				prediction = softmax(prediction)
 			print(prediction)
 
 if __name__ == '__main__':
