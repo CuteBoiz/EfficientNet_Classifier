@@ -25,6 +25,24 @@ def softmax(x):
 	return e_x / e_x.sum(axis=0)
 
 
+def infer_preprocess(data, image_size):
+	if isinstance(data, np.ndarray):
+		data = [data]
+	elif isinstance(data, list):
+		pass		
+	for i in range(len(data)):
+		image = data[i]
+		image = cv2.resize(image, (image_size, image_size), interpolation=cv2.INTER_AREA)
+		image = np.float32(image)
+		image = image*(1/255)
+		mean = [0.485, 0.456, 0.406]
+		std = [0.229, 0.224, 0.225]
+		image = (image - mean) / std
+		data[i] = image.transpose((2, 0, 1))
+	data = np.asarray(data).astype(np.float32)
+	return data
+
+
 def get_cofusion_matrix(evaluate_dict):
 	'''
 		Get confusion matrix from test set.

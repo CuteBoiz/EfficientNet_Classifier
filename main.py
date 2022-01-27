@@ -14,7 +14,7 @@ import numpy as np
 from Efnet.model import EfficientNet
 from utils.custom_dataset import CustomDataset, Normalize, ToTensor, Resize
 from utils.train_utilities import  get_class_weight, train_eff
-from utils.report_utilities import create_report, softmax
+from utils.report_utilities import create_report, softmax, infer_preprocess
 
 import torch
 import torchvision.transforms as transforms
@@ -64,10 +64,10 @@ def prepare_arguments():
 	export_excel_parser.add_argument('--batch_size', type=int, default=32)
 
 	infer_parser = subparser.add_parser("infer")
-	infer_parser.add_argument("--weight", type=str, required=True)
-	infer_parser.add_argument("--data", type=str, required=True)
-	infer_parser.add_argument("--batch_size", type=int, default=1)
-	infer_parser.add_argument("--softmax", action='store_true', default=False)
+	infer_parser.add_argument("-w", "--weight", type=str, required=True)
+	infer_parser.add_argument("-d", "--data", type=str, required=True)
+	infer_parser.add_argument("-bs", "--batch_size", type=int, default=1)
+	infer_parser.add_argument("-s", "--softmax", action='store_true', default=False)
 
 	return parser.parse_args()
 	
@@ -292,22 +292,30 @@ def infer(args):
 	else:
 		raise Exception(f"[ERROR] Could not load data from {args.data}")
 
+	# Batched
+	batched_images = []
+	range_num = len(images)//args.batch_size+1 if len(images)%args.batch_size > 0 else len(images)//args.batch_size
+	for i in range(range_num):
+		batched_images.append([])
+	count  = 0
+	index = 0
+	for i in range(len(images)):
+		batched_images[index].append(images[i])
+		count+=1
+		if count == args.batch_size:
+			count = 0
+			index += 1
+
 	with torch.no_grad():
-		for image in images:
-			image = cv2.resize(image, (image_size, image_size), interpolation = cv2.INTER_AREA)
-			image = np.float32(image)
-			image = image*(1/255)
-			mean = [0.485, 0.456, 0.406]
-			std = [0.229, 0.224, 0.225]
-			image = (image - mean) / std
-			image = image.transpose((2, 0, 1))
-			image = np.asarray([image]).astype(np.float32)
-			image = torch.from_numpy(image).to(device=device, dtype=torch.float)
-			
-			prediction = np.squeeze(model(image).cpu().numpy())
-			if args.softmax:
-				prediction = softmax(prediction)
-			print(prediction)
+		for batch in batched_images:
+			batch = infer_preprocess(batch, image_size)
+			batch = torch.from_numpy(batch).to(device=device, dtype=torch.float)
+			predictions = model(batch).cpu().numpy()
+			for pred in predictions:
+				if args.softmax:
+					pred = softmax(pred)
+				np.set_printoptions(suppress=True)
+				print(np.array(pred, dtype=float))
 
 if __name__ == '__main__':
 	
