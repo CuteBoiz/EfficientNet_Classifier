@@ -3,7 +3,7 @@
 ## <div align="center"> I. TRAIN. </div>
 
 ```sh
-python3 main.py train
+python3 train.py
 ```
 
 - **Arguments:**
@@ -26,21 +26,19 @@ DataPath
 "path/to/image1.png" 0
 "path/to/image2.jpg" 2
 "path/to/image3.png" 1
-...
 ```
 
 - **label.txt:**
 ```sh
 dog
 cat
-...
 ```
 
 
-## <div align="center"> II. EXPORT EXCEL. </div>
+## <div align="center"> II. RUN TEST SET AND EXPORT RESULT TO EXCEL FILE. </div>
 
 ```sh
-python3 main.py export_excel
+python3 test.py
 ```
 
 - **Arguments:**
@@ -49,10 +47,10 @@ python3 main.py export_excel
 |-----------|------|---------|------
 
 
-## <div align="center"> III. INFERENCE MOEL. </div>
+## <div align="center"> III. INFERENCE MODEL ON IMAGE/VIDEO/IMAGES FOLDER. </div>
 
 ```sh
-python3 main.py infer
+python3 infer.py
 ```
 
 - **Arguments:**
@@ -64,7 +62,7 @@ python3 main.py infer
 ## <div align="center"> IV. EXPORT ONNX. </div>
 
 ```sh
-python3 main.py export_onnx
+python3 export.py
 ```
 
 - **Arguments:**

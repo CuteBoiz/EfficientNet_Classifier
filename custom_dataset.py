@@ -25,7 +25,7 @@ class CustomDataset(torch.utils.data.Dataset):
 		self.targets = []
 		self.transform = transform
 
-		with open(txt_file, 'r') as f:
+		with open(txt_file, 'r', encoding='utf-8') as f:
 			lines = f.readlines()
 		for line in lines:
 			line = line.strip()
@@ -39,7 +39,9 @@ class CustomDataset(torch.utils.data.Dataset):
 	def __getitem__(self, idx):
 		if torch.is_tensor(idx):
 			idx = idx.tolist()
+		assert os.path.isfile(self.image_paths[idx]), f'[ERROR] Could not found {self.image_paths[idx]}!'
 		image = cv2.imread(self.image_paths[idx])
+		assert image is not None, '[ERROR] image is None'
 		target = int(self.targets[idx])
 		path = self.image_paths[idx]
 		sample = {'image': image, 'path': path, 'target': target}
@@ -48,13 +50,13 @@ class CustomDataset(torch.utils.data.Dataset):
 		return sample
 
 class Resize(object):
-	def __init__(self, output_size):
-		assert isinstance(output_size, int)
-		self.output_size = output_size
+	def __init__(self, imgsz):
+		assert isinstance(imgsz, int)
+		self.imgsz = imgsz
 		
 	def __call__(self, sample):
 		image, path, target = sample['image'], sample['path'], sample['target']
-		resized = cv2.resize(image, (self.output_size, self.output_size), interpolation = cv2.INTER_AREA)
+		resized = cv2.resize(image, (self.imgsz, self.imgsz), interpolation = cv2.INTER_AREA)
 		return {'image': resized, 'path': path, 'target': target}
 	
 class Normalize(object):

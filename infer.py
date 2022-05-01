@@ -58,7 +58,8 @@ def infer(args):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     checkpoint = torch.load(args.weight, map_location='cpu')
     imgsz = checkpoint['image_size']
-    model = EfficientNet.from_name('efficientnet-b{}'.format(checkpoint['arch']), num_classes=checkpoint['nrof_classes'], image_size=image_size)
+    model = EfficientNet.from_name(f'efficientnet-b{checkpoint["arch"]}', num_classes=checkpoint['num_classes'],
+                                    image_size=imgsz, in_channels=checkpoint['in_channels'])
     model.load_state_dict(checkpoint['state_dict'])
     model.to(device=device, dtype=torch.float)
     model.set_swish(memory_efficient=False)
@@ -96,7 +97,7 @@ def infer(args):
 
     # Batched
     batched_images = []
-    range_num = len(images)//args.batch_size+1 if len(images)%args.batch_size > 0 else len(images)//args.batch_size
+    range_num = len(images)//args.batch+1 if len(images)%args.batch > 0 else len(images)//args.batch
     for i in range(range_num):
         batched_images.append([])
     count  = 0
@@ -104,7 +105,7 @@ def infer(args):
     for i in range(len(images)):
         batched_images[index].append(images[i])
         count+=1
-        if count == args.batch_size:
+        if count == args.batch:
             count = 0
             index += 1
 

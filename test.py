@@ -22,8 +22,7 @@ from custom_dataset import CustomDataset, Normalize, ToTensor, Resize
 
 def parser_args():
 	parser = argparse.ArgumentParser()
-	parser.add_argument('--label', type=str, required=True)
-	parser.add_argument('--test', type=str, required=True)
+	parser.add_argument('--data', type=str, required=True)
 	parser.add_argument('--weight', type=str, required=True)
 	parser.add_argument('--thres', type=str, default=None)
 	parser.add_argument('--device', type=int, default=0)
@@ -64,13 +63,13 @@ def get_cofusion_matrix(evaluate_dict):
 	model = evaluate_dict['model']
 	model.eval()
 	train_classes = evaluate_dict['train_classes']
-	nrof_classes = len(train_classes)
+	num_classes = len(train_classes)
 
-	result_matrix = np.zeros((nrof_classes, nrof_classes + 1), dtype=np.int32) 
+	result_matrix = np.zeros((num_classes, num_classes + 1), dtype=np.int32) 
 	overkill = 0
 	underkill = 0
 	false_defects = []
-	new_thresholds = np.ones(len(train_classes))
+	new_thresholds = np.ones(num_classes)
 	process_bar = tqdm()
 
 	# Caculate confusion matrix
@@ -92,7 +91,7 @@ def get_cofusion_matrix(evaluate_dict):
 				highest_score_idx = softmaxed.argmax()
 				# Apply thesholds
 				mask = (softmaxed >= evaluate_dict['thresholds'])
-				predicted_label = nrof_classes if not any(mask) else (softmaxed * mask).argmax()
+				predicted_label = num_classes if not any(mask) else (softmaxed * mask).argmax()
 				# Cofusion matrix
 				result_matrix[gt_label][predicted_label] += 1
 				if gt_label != predicted_label: # False predict
@@ -103,7 +102,7 @@ def get_cofusion_matrix(evaluate_dict):
 									'highest_label': highest_score_idx,
 									'highest_score': softmaxed[highest_score_idx]}
 					false_defects.append(false_defect)
-					if predicted_label < nrof_classes:
+					if predicted_label < num_classes:
 						if train_classes[gt_label] == 'Pass':
 							overkill += 1
 						if train_classes[predicted_label] == 'Pass':
@@ -115,7 +114,7 @@ def get_cofusion_matrix(evaluate_dict):
 	process_bar.close()
 	# Calculate accuracy
 	count = 0
-	for i in range(nrof_classes):
+	for i in range(num_classes):
 		count+=result_matrix[i][i]
 	accuracy = (count/np.sum(result_matrix))*100
 	
@@ -168,18 +167,18 @@ def create_report(test_file, evaluate_dict, report_save_dir='./'):
 	'''
 	# Get test set quantity
 	train_classes = evaluate_dict['train_classes']
+	num_classes = len(train_classes)
 	thresholds = evaluate_dict['thresholds']
-	test_quantity = np.zeros(len(train_classes), dtype=np.int32)
-	with open(test_file, 'r') as f:
+	test_quantity = np.zeros(num_classes, dtype=np.int32)
+	with open(test_file, 'r', encoding='utf-8') as f:
 		lines = f.readlines()
 	for line in lines:
 		line = line.strip()
 		label = int(line.split("\"")[-1].strip())
 		test_quantity[label] += 1
-
 	total_accuracy, result_matrix, false_defects, underkill, overkill = get_cofusion_matrix(evaluate_dict)
 
-	#REPORT
+	# REPORT
 	report_save_path = os.path.join(report_save_dir, 'report.xlsx')
 	report_sheet = xlsxwriter.Workbook(report_save_path)
 	sheet1 = report_sheet.add_worksheet('TOMOC Report')
@@ -194,34 +193,33 @@ def create_report(test_file, evaluate_dict, report_save_dir='./'):
 	sheet1_column_width = [ ('B', 25), # Model's name
 							('C', 40), # Defect's name
 							('D', 20), # Quantities
-							('E:{}'.format(calculate_exel_char('E', len(train_classes)-1)), 30), # Train classes
-							('{}:{}'.format(calculate_exel_char('E', len(train_classes)), 
-											calculate_exel_char('E', len(train_classes)+2)), 25)] # Thresholds, Accuracy
+							('E:{}'.format(calculate_exel_char('E', num_classes-1)), 30), # Train classes
+							('{}:{}'.format(calculate_exel_char('E', num_classes), 
+											calculate_exel_char('E', num_classes+2)), 25)] # Thresholds, Accuracy
 	set_cols(sheet1, sheet1_column_width)
 	for row in range(1, 4):
-		for col in range(1, 7+len(train_classes)):
+		for col in range(1, 7+num_classes):
 			sheet1.write(row, col, '', HEADER)
-	sheet1.freeze_panes(3, 4)
-	sheet1.merge_range(f"E2:{calculate_exel_char('E',len(train_classes)-1)}2", 'Defect Type', HEADER)
-	sheet1.merge_range(f"B4:B{4+len(train_classes)-1}", 'Efficient-Net', HEADER)
+	#sheet1.freeze_panes(3, 4)
+	sheet1.merge_range(f"E2:{calculate_exel_char('E',num_classes-1)}2", 'Defect Type', HEADER)
+	sheet1.merge_range(f"B4:B{4+num_classes-1}", 'Efficient-Net', HEADER)
 
 	# Sheet 1 content
 	sheet1_header1 = ['Model\'s Name','Defect Type', 'Quantities'] + train_classes + ['Unknown','Threshold','Accuracy']
 	sheet1.write_row(2, 1, sheet1_header1, HEADER)
-	#sheet1.write_row(1, 6+len(train_classes)-1, row_header_1_2, HEADER)
+	#sheet1.write_row(1, 6+num_classes-1, row_header_1_2, HEADER)
 
-	for i in range (len(train_classes)):
+	for i in range (num_classes):
 		# Class name / quantities / result / threshold / acc
-		sheet1_content1 = [train_classes[i], test_quantity[i], result_matrix[i], thresholds[i], f'{result_matrix[i][i]/test_quantities[i]*100:.2f}%']
+		sheet1_content1 = [f'{train_classes[i]}', f'{test_quantity[i]}'] + [str(x) for x in result_matrix[i]] + [f'{thresholds[i]}', f'{result_matrix[i][i]/test_quantity[i]*100:.2f}%']
 		sheet1.write_row(3+i, 2, sheet1_content1, NORMAL)
 		sheet1.write(3+i, 4+i, result_matrix[i][i], HEADER)
 	
 	# Sheet1 sumarize result 
 	total_test_img = np.sum(test_quantity)
-	true_predict = np.sum([result_matrix[i][i] for i in range(len(train_classes))])
+	true_predict = np.sum([result_matrix[i][i] for i in range(num_classes)])
 	sheet1_content2 = ['Underkill', underkill, 'Overkill', overkill, 'Total False Predict', total_test_img-true_predict, 'Total Accuracy', f'{total_accuracy:.2f}%']
-	sheet1.write_row(3+len(train_classes) ,len(train_classes)-1, sheet1_content2, HEADER)
-
+	sheet1.write_row(3+num_classes ,num_classes-1, sheet1_content2, HEADER)
 
 	# SHEET 2
 	sheet2.set_column('C:G', 34)
@@ -233,14 +231,14 @@ def create_report(test_file, evaluate_dict, report_save_dir='./'):
 
 	for count, false_defect in enumerate(false_defects):
 		sheet2.set_row(2+count, 200)
-		gt_class = train_classes[false_defect['gt_label']]
-		gt_text = f'{gt_class}\n{predicted_score:.5f}'
-		if false_defect['predicted_label'] < len(train_classes): 
+		if false_defect['predicted_label'] < num_classes: 
 			predicted_class = train_classes[false_defect['predicted_label']]
 			predicted_score = false_defect['gt_score']
 		else:
 			predicted_class = 'Unknown'
-		predicted_text = f'{predicted_class}\n({predicted_score:.5f})'
+		gt_class = train_classes[false_defect['gt_label']]
+		gt_text = f'{gt_class.upper()}\n({predicted_score*100:.3f}%)'
+		predicted_text = f'{predicted_class.upper()}\n({predicted_score*100:.3f}%)'
 		
 		sheet2_content1 = [count+1, 'image', gt_text, predicted_text, false_defect['image_path']]
 		sheet2.write_row(2+count, 1, sheet2_content1, NORMAL)
@@ -262,27 +260,27 @@ def test(args):
 	'''
 	print("Export Excel Report")
 	
-	label_file =  os.path.join(args.label, "label.txt")
-	test_file = os.path.join(args.test, "test.txt")
+	label_file =  os.path.join(args.data, "label.txt")
+	test_file = os.path.join(args.data, "test.txt")
 	assert os.path.isfile(label_file), f'[ERROR] Could not found {label_file}!'
 	assert os.path.isfile(test_file), f'[ERROR] Could not found {test_file}!'
 	
 	# Get Classes name
 	thresholds = []
 	train_classes = []
-	with open(label_file, 'r') as label_f:
+	with open(label_file, 'r', encoding='utf-8') as label_f:
 		lines = label_f.readlines()
 	for line in lines:
 		class_name = line.strip()
 		train_classes.append(class_name)
-	
+	num_classes = len(train_classes)
 	# Create threshold file
 	if args.thres is None:
 		thres_file = 'thres.csv'
 		csv_file = open(thres_file, 'w', encoding='UTF8')
 		csv_writer = csv.writer(csv_file)
 		for class_name in train_classes:
-			csv_writer.writerow(['{}'.format(class_name),'0.2'])
+			csv_writer.writerow([f'{class_name}','0.2'])
 		csv_file.close()
 		print('[INFO]: {} created!'.format(thres_file))
 	else:
@@ -291,20 +289,20 @@ def test(args):
 
 	# Get thresholds
 	print('[INFO] Train classes / Threshold:')
-	with open(thres_file, 'r') as thres_f:
+	with open(thres_file, 'r', encoding='utf-8') as thres_f:
 		csv_reader = csv.reader(thres_f, delimiter = ',')
 		for row in csv_reader:
 			print(row)
 			threshold = float(row[1])
 			thresholds.append(threshold)
-	assert len(thresholds) == len(train_classes)
+	assert len(thresholds) == num_classes
 
 	# Load model
 	device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 	torch.cuda.set_device(args.device)
 	checkpoint = torch.load(args.weight, map_location=device)
 	imgsz = checkpoint['image_size']
-	model = EfficientNet.from_name(f'efficientnet-b{checkpoint["arch"]}', num_classes=checkpoint['nrof_classes'], 
+	model = EfficientNet.from_name(f'efficientnet-b{checkpoint["arch"]}', num_classes=checkpoint['num_classes'], 
 									image_size=imgsz, in_channels=checkpoint["in_channels"])
 
 	data_transforms = transforms.Compose([Resize(imgsz), Normalize(), ToTensor()])
@@ -322,7 +320,7 @@ def test(args):
 					'thresholds': thresholds,
 					'device': device}
 	print('[INFO] Evaluating model ...')
-	create_report(test_file=args.test_file, evaluate_dict=evaluate_dict, report_save_dir=os.path.dirname(args.weight))
+	create_report(test_file=test_file, evaluate_dict=evaluate_dict, report_save_dir=os.path.dirname(args.weight))
 
 if __name__ == '__main__':
 	args = parser_args()

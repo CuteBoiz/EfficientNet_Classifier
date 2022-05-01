@@ -20,7 +20,7 @@ from custom_dataset import CustomDataset, Normalize, ToTensor, Resize
 
 def parser_args():
 	parser = argparse.ArgumentParser()
-	parser.add_argument('--data_path', type=str)
+	parser.add_argument('--data', type=str)
 	parser.add_argument('--imgsz', type=int, default=None)
 	parser.add_argument('--channels',type=int, default=3)
 	parser.add_argument('--arch', type=int, default=3, help='EfficientNet architechture(0->8)')
@@ -46,8 +46,7 @@ def save_checkpoint(state, saved_path, is_best_loss, is_best_acc):
 	'''
 	assert state is not None, '[ERROR]: state dict is none!'
 	os.makedirs(saved_path, exist_ok=True)
-
-	saved_file = os.path.join(saved_path, 'model_last.pth') 
+	saved_file = os.path.join(saved_path, 'last.pth') 
 	torch.save(state, saved_file)
 	if is_best_loss:
 		shutil.copyfile(saved_file, saved_file.replace('last', 'best_loss'))
@@ -55,7 +54,7 @@ def save_checkpoint(state, saved_path, is_best_loss, is_best_acc):
 		shutil.copyfile(saved_file, saved_file.replace('last', 'best_acc'))
 	print('[INFO] Checkpoint saved!')
 
-def get_class_weight(train_file, nrof_classes):
+def get_class_weight(train_file, num_classes):
 	'''
 		Get class weight array. In order to deal with imbalance dataset.
 		Args: 
@@ -65,22 +64,22 @@ def get_class_weight(train_file, nrof_classes):
 			An class weight array (length = nrof_classes)
 	'''
 	assert os.path.isfile(train_file), '[ERROR]: {} not found!'.format(train_file)
-	assert isinstance(nrof_classes, int) and nrof_classes >= 0, '[ERROR]: nrof_classes is not valid!'
+	assert isinstance(num_classes, int) and num_classes >= 0, '[ERROR]: nrof_classes is not valid!'
 	
 	# Count quantity of each class
-	class_quantities = np.zeros(nrof_classes, dtype=np.int32)
+	class_quantities = np.zeros(num_classes, dtype=np.int32)
 	class_weights = []
-	with open(train_file, 'r') as f:
+	with open(train_file, 'r', encoding='utf-8') as f:
 		lines = f.readlines()
 	for line in lines:
 		line = line.strip()
 		target = int(line.split("\"")[2].strip())
-		assert target < nrof_classes
+		assert target < num_classes, f'[ERROR] label_id must be smaller than {num_classes}, got {target}'
 		class_quantities[target]+=1
 
 	# Caculate class-weight
 	for quantity in class_quantities:
-		cls_weight = np.sum(class_quantities)/(nrof_classes*quantity)
+		cls_weight = np.sum(class_quantities)/(num_classes*quantity)
 		class_weights.append(cls_weight)
 	return class_weights
 
@@ -130,12 +129,24 @@ def train(args):
 	'''
 		Train efficient net.
 	'''
-	assert args.image_size > 0, '[ERROR] Image size must > 0'
-	assert args.batch_size > 0, '[ERROR] Batch size must > 0'
-	assert args.max_epoch > 0, '[ERROR] Max epoch must > 0'
+	
+	assert args.batch > 0, '[ERROR] Batch size must > 0'
+	assert args.epoch > 0, '[ERROR] Max epoch must > 0'
 	assert args.arch >= 0 and args.arch <= 8, '[ERROR] Invalid EfficientNet Architecture (0 -> 8)'
-	assert os.path.isdir(args.data_path), f'[ERROR] Could not found {args.data_path}. Or not a directory!'
-		
+	assert os.path.isdir(args.data), f'[ERROR] Could not found {args.data}. Or not a directory!'
+	
+	# Load label
+	label_file = os.path.join(args.data, "label.txt") 
+	assert os.path.isfile(label_file), f'[ERROR] Could not found label.txt in {args.data}'
+	train_classes = []
+	with open(label_file, 'r', encoding='utf-8') as label_f:
+		lines = label_f.readlines()
+	for line in lines:
+		train_classes.append(line.strip())
+	num_classes = len(train_classes)
+	print('[INFO] Number of classes:', num_classes)
+	print('[INFO] Training class: ', train_classes)
+
 	# Load model
 	if torch.cuda.is_available():
 		device = torch.device("cuda")
@@ -144,26 +155,20 @@ def train(args):
 		device = torch.device("cpu")
 	model_name = f'efficientnet-b{args.arch}'
 	if args.imgsz is None:
-		model = EfficientNet.from_pretrained(model_name, in_channels=args.channels, num_classes=len(train_classes))
+		model = EfficientNet.from_pretrained(model_name, num_classes=num_classes, in_channels=args.channels)
 		imgsz = model.get_image_size(model_name)
 	else:
 		imgsz = args.imgsz 
-		model = EfficientNet.from_pretrained(model_name, in_channels=args.channels, num_classes=len(train_classes), image_size=imgsz)
+		assert args.imgsz > 0, '[ERROR] Image size must > 0'
+		model = EfficientNet.from_pretrained(model_name, num_classes=num_classes,
+											in_channels=args.channels, image_size=imgsz)
 
 	# Load data 
-	train_file = os.path.join(args.data_path, "train.txt")
-	valid_file = os.path.join(args.data_path, "val.txt")
-	label_file = os.path.join(args.data_path, "label.txt")
-	assert os.path.isfile(train_file), f'[ERROR] Could not found train.txt in {args.data_path}'
-	assert os.path.isfile(valid_file), f'[ERROR] Could not found val.txt in {args.data_path}'
-	assert os.path.isfile(label_file), f'[ERROR] Could not found label.txt in {args.data_path}'
-	train_classes = []
-	with open(label_file, 'r', encoding='utf-8') as label_f:
-		lines = label_f.readlines()
-	for line in lines:
-		train_classes.append(line.strip())
-	print('[INFO] Number of classes:', len(train_classes))
-	print('[INFO] Training class: ', train_classes)
+	train_file = os.path.join(args.data, "train.txt")
+	valid_file = os.path.join(args.data, "val.txt")
+	assert os.path.isfile(train_file), f'[ERROR] Could not found train.txt in {args.data}'
+	assert os.path.isfile(valid_file), f'[ERROR] Could not found val.txt in {args.data}'
+	
 	train_transforms = transforms.Compose([Resize(imgsz), Normalize(), ToTensor()])
 	train_loader = torch.utils.data.DataLoader(CustomDataset(train_file, train_transforms),
 												batch_size=args.batch, shuffle=True,
@@ -172,14 +177,14 @@ def train(args):
 	val_loader = torch.utils.data.DataLoader(CustomDataset(valid_file, val_transforms),
 												batch_size=args.batch, shuffle=True,
 												num_workers=args.workers, pin_memory=True)
-	cls_weights = get_class_weight(train_file, len(train_classes))
+	cls_weights = get_class_weight(train_file, num_classes)
 	print("[INFO] Class Weights:", cls_weights)
 	cls_weights = torch.FloatTensor(cls_weights)
 
 	print('[INFO] Model info:')
 	print(f'\t + Using Efficientnet-b{args.arch}.')
 	print(f'\t + Input image size: {imgsz} x {imgsz} x {args.channels}.')
-	print(f'\t + Output Classes: {len(train_classes)}.')
+	print(f'\t + Output Classes: {num_classes}.')
 	
 	last_epoch = 1
 	# Resume checkpoints
@@ -201,7 +206,7 @@ def train(args):
 	scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=3, verbose=True)
 
 	# Create log and weight saved folder
-	saved_folder_name = os.path.basename(os.path.dirname(args.data_path))
+	saved_folder_name = os.path.basename(os.path.dirname(args.data))
 	log_dir = os.path.join('./logs/', saved_folder_name)
 	weight_save_dir = os.path.join('./result/', saved_folder_name)
 	os.makedirs(log_dir, exist_ok=True)
@@ -212,13 +217,12 @@ def train(args):
 	
 	# Train
 	init_lr = args.lr
-	max_epoch = args.epoch+1
-	nrof_classes = len(train_classes)
+	max_epoch = args.epoch
 	best_loss = 1e5
 	best_acc = 0
 	try:
-		for epoch in range(1, max_epoch):
-			if epoch < last_epoch:
+		for epoch in range(1, max_epoch+1):
+			if epoch <= last_epoch:
 				continue
 			model.train()
 			epoch_loss = []
@@ -229,11 +233,11 @@ def train(args):
 
 			for i, sample_batched in enumerate(train_loader):
 				images = sample_batched['image']
-				target = sample_batched['target']
+				targets = sample_batched['target']
 				images = images.to(device=device, dtype=torch.float)
-				target = target.to(device=device, dtype=torch.float)
+				targets = targets.to(device=device, dtype=torch.float)
 				output = model(images)
-				loss = criterion(output, target.long())
+				loss = criterion(output, targets.long())
 				if loss == 0 or not torch.isfinite(loss):
 					continue
 				optimizer.zero_grad()
@@ -250,14 +254,16 @@ def train(args):
 			writer.add_scalar('Training Loss', loss, epoch * len(train_loader) + i)
 			writer.add_scalar('Training Learning rate', current_lr, epoch)
 			writer.add_scalar('Training Accuracy', accuracy, epoch)
-
-			print(f"[INFO] Epoch {epoch}: Loss: {loss:.5f}, Accuracy: {accuracy:.2f}%")
+			
 			if (loss < best_loss):
 				best_loss = loss
 				is_best_loss = True
 			if (accuracy > best_acc):
 				best_acc = accuracy
 				is_best_acc = True
+			writer.close()
+			progress_bar.close()
+			print(f"[INFO] Epoch {epoch}: Loss: {loss:.5f}, Accuracy: {accuracy:.2f}%")
 			save_checkpoint({
 				'epoch': epoch,
 				'arch': args.arch,
@@ -265,14 +271,14 @@ def train(args):
 				'in_channels': args.channels,
 				'state_dict': model.state_dict(),
 				'optimizer' : optimizer.state_dict(),
-				'nrof_classes': nrof_classes},
+				'num_classes': num_classes},
 				saved_path=weight_save_dir, is_best_loss=is_best_loss, is_best_acc=is_best_acc)
 			is_best_loss = False
 			is_best_acc = False
 			last_epoch = epoch
+	except KeyboardInterrupt:
 		writer.close()
 		progress_bar.close()
-	except KeyboardInterrupt:
 		save_checkpoint({
 			'epoch': last_epoch,
 			'arch': args.arch,
@@ -280,10 +286,9 @@ def train(args):
 			'in_channels': args.channels,
 			'state_dict': model.state_dict(),
 			'optimizer' : optimizer.state_dict(),
-			'nrof_classes': nrof_classes},
+			'num_classes': num_classes},
 			saved_path=weight_save_dir, is_best_loss=False, is_best_acc=False)
-		writer.close()
-		progress_bar.close()
+		
 	
 if __name__ == '__main__':
 	args = parser_args()
