@@ -1,20 +1,24 @@
+'''
+Efficient-net inference on image/video/images folder
 
-import argparse
+author: phatnt
+date: May-01-2022
+'''
 import os
 import cv2
 import torch
-from efficientnet_pytorch import EfficientNet
 import glob
+import argparse
 import numpy as np
+from efficientnet_pytorch import EfficientNet
 
 def parser_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("-w", "--weight", type=str, required=True)
-    parser.add_argument("-d", "--data", type=str, required=True)
-    parser.add_argument("-bs", "--batch_size", type=int, default=1)
-    parser.add_argument("-s", "--softmax", action='store_true', default=False)
+    parser.add_argument("--weight", type=str, required=True)
+    parser.add_argument("--data", type=str, required=True)
+    parser.add_argument("--batch", type=int, default=1)
+    parser.add_argument("--softmax", action='store_true', default=False)
     return parser.parse_args()
-
 
 def softmax(x):
 	'''
@@ -53,7 +57,7 @@ def infer(args):
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     checkpoint = torch.load(args.weight, map_location='cpu')
-    image_size = checkpoint['image_size']
+    imgsz = checkpoint['image_size']
     model = EfficientNet.from_name('efficientnet-b{}'.format(checkpoint['arch']), num_classes=checkpoint['nrof_classes'], image_size=image_size)
     model.load_state_dict(checkpoint['state_dict'])
     model.to(device=device, dtype=torch.float)
@@ -106,7 +110,7 @@ def infer(args):
 
     with torch.no_grad():
         for batch in batched_images:
-            batch = infer_preprocess(batch, image_size)
+            batch = infer_preprocess(batch, imgsz)
             batch = torch.from_numpy(batch).to(device=device, dtype=torch.float)
             predictions = model(batch).cpu().numpy()
             for pred in predictions:

@@ -1,16 +1,24 @@
+'''
+Test efficient-net trained model 
+Visualize result to excel file.
 
-import argparse
+author: phatnt
+date: May-01-2022
+'''
 import os
 import csv
+import shutil
 import cv2
-from custom_dataset import CustomDataset, Normalize, ToTensor, Resize
+import argparse
+import xlsxwriter
 import numpy as np
 
 import torch
 import torchvision.transforms as transforms
 from efficientnet_pytorch import EfficientNet
 from tqdm.autonotebook import tqdm
-import xlsxwriter
+from custom_dataset import CustomDataset, Normalize, ToTensor, Resize
+
 
 def parser_args():
 	parser = argparse.ArgumentParser()
@@ -23,7 +31,17 @@ def parser_args():
 	parser.add_argument('--batch_size', type=int, default=32)
 	return parser.parse_args()
 
-
+def softmax(x):
+	'''
+		Calculate softmax of an array.
+		Args:
+			x: an array.
+		Return:
+			Softmax score of input array.
+	'''
+	assert x is not None, '[ERROR]: input is none!'
+	e_x = np.exp(x - np.max(x))
+	return e_x / e_x.sum(axis=0)
 
 def get_cofusion_matrix(evaluate_dict):
 	'''
@@ -42,7 +60,7 @@ def get_cofusion_matrix(evaluate_dict):
 			underkill: number of underkill images.
 			overkill:: number of overkill images.
 	'''
-	assert evaluate_dict is not None, '[ERROR]: evaluate dict is none!'
+	assert evaluate_dict is not None, '[ERROR]: evaluate dict is None!'
 	model = evaluate_dict['model']
 	model.eval()
 	train_classes = evaluate_dict['train_classes']
@@ -60,31 +78,25 @@ def get_cofusion_matrix(evaluate_dict):
 		for i, sample_batched in enumerate(evaluate_dict['data_loader']):
 			# Get output from model
 			images = sample_batched['image']
-			path = sample_batched['path']
-			target = sample_batched['target']
+			paths = sample_batched['path']
+			targets = sample_batched['target']
 			images = images.to(device=evaluate_dict['device'], dtype=torch.float)
 			targets = np.array(targets)
 			score = model(images)
 			score = score.cpu().data.numpy()
 
 			# Compare with target
-			for i in range (len(target)):
+			for i in range (len(targets)):
 				gt_label = targets[i]
 				softmaxed = softmax(score[i])
 				highest_score_idx = softmaxed.argmax()
-
-				# Apply theshold mask
+				# Apply thesholds
 				mask = (softmaxed >= evaluate_dict['thresholds'])
-				if not any(mask):
-					predicted_label = nrof_classes
-				else:
-					masked = softmaxed * mask
-					predicted_label = masked.argmax()
-
+				predicted_label = nrof_classes if not any(mask) else (softmaxed * mask).argmax()
 				# Cofusion matrix
 				result_matrix[gt_label][predicted_label] += 1
 				if gt_label != predicted_label: # False predict
-					false_defect = {'image_path': path[i],
+					false_defect = {'image_path': paths[i],
 									'gt_label': gt_label,
 									'predicted_label': predicted_label,
 									'gt_score': softmaxed[gt_label],
@@ -96,13 +108,11 @@ def get_cofusion_matrix(evaluate_dict):
 							overkill += 1
 						if train_classes[predicted_label] == 'Pass':
 							underkill += 1
-					process_bar.set_description("False Predicts: {}".format(len(false_defects)))
+					process_bar.set_description(f'Number of false predict cases: {len(false_defects)}')
 				elif gt_label == predicted_label: # True predict
 					if (softmaxed[gt_label] < new_thresholds[gt_label]):
 						new_thresholds[gt_label] = softmaxed[gt_label]
 	process_bar.close()
-
-	
 	# Calculate accuracy
 	count = 0
 	for i in range(nrof_classes):
@@ -156,17 +166,16 @@ def create_report(test_file, evaluate_dict, report_save_dir='./'):
 	Args:
 
 	'''
-
-	# Get quantites test set
+	# Get test set quantity
 	train_classes = evaluate_dict['train_classes']
 	thresholds = evaluate_dict['thresholds']
-	test_quantities = np.zeros(len(train_classes), dtype=np.int32)
+	test_quantity = np.zeros(len(train_classes), dtype=np.int32)
 	with open(test_file, 'r') as f:
 		lines = f.readlines()
 	for line in lines:
 		line = line.strip()
 		label = int(line.split("\"")[-1].strip())
-		test_quantities[label] += 1
+		test_quantity[label] += 1
 
 	total_accuracy, result_matrix, false_defects, underkill, overkill = get_cofusion_matrix(evaluate_dict)
 
@@ -203,12 +212,12 @@ def create_report(test_file, evaluate_dict, report_save_dir='./'):
 
 	for i in range (len(train_classes)):
 		# Class name / quantities / result / threshold / acc
-		sheet1_content1 = [train_classes[i], test_quantities[i], result_matrix[i], thresholds[i], f'{result_matrix[i][i]/test_quantities[i]*100:.2f}%']
+		sheet1_content1 = [train_classes[i], test_quantity[i], result_matrix[i], thresholds[i], f'{result_matrix[i][i]/test_quantities[i]*100:.2f}%']
 		sheet1.write_row(3+i, 2, sheet1_content1, NORMAL)
 		sheet1.write(3+i, 4+i, result_matrix[i][i], HEADER)
 	
 	# Sheet1 sumarize result 
-	total_test_img = np.sum(test_quantities)
+	total_test_img = np.sum(test_quantity)
 	true_predict = np.sum([result_matrix[i][i] for i in range(len(train_classes))])
 	sheet1_content2 = ['Underkill', underkill, 'Overkill', overkill, 'Total False Predict', total_test_img-true_predict, 'Total Accuracy', f'{total_accuracy:.2f}%']
 	sheet1.write_row(3+len(train_classes) ,len(train_classes)-1, sheet1_content2, HEADER)
@@ -244,6 +253,7 @@ def create_report(test_file, evaluate_dict, report_save_dir='./'):
 		sheet2.insert_image(2+count, 2, saved_img_path ,{'x_scale':1.0 , 'y_scale':1.0, 'x_offset': 5, 'y_offset': 5, 'object_position': 1})
 
 	report_sheet.close()
+	shutil.rmtree(saved_path)
 	print(f'{report_save_path} Created')
 
 def test(args):
@@ -294,8 +304,8 @@ def test(args):
 	torch.cuda.set_device(args.device)
 	checkpoint = torch.load(args.weight, map_location=device)
 	imgsz = checkpoint['image_size']
-	model = EfficientNet.from_name(f'efficientnet-b{checkpoint["arch"]}', 
-									num_classes=checkpoint['nrof_classes'], image_size=imgsz)
+	model = EfficientNet.from_name(f'efficientnet-b{checkpoint["arch"]}', num_classes=checkpoint['nrof_classes'], 
+									image_size=imgsz, in_channels=checkpoint["in_channels"])
 
 	data_transforms = transforms.Compose([Resize(imgsz), Normalize(), ToTensor()])
 	data_loader = torch.utils.data.DataLoader(CustomDataset(test_file, data_transforms),

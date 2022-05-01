@@ -1,21 +1,25 @@
-import argparse
+'''
+Train efficient-net classifier
+
+author: phatnt
+date: May-01-2022
+'''
 import os
-import shutil
 import os
 import torch
+import shutil
+import argparse
 import numpy as np
+
+import torch
 from tqdm.autonotebook import tqdm
 from efficientnet_pytorch import EfficientNet
-
-import torch
 import torchvision.transforms as transforms
 from torch.utils.tensorboard import SummaryWriter
-
 from custom_dataset import CustomDataset, Normalize, ToTensor, Resize
 
 def parser_args():
 	parser = argparse.ArgumentParser()
-	
 	parser.add_argument('--data_path', type=str)
 	parser.add_argument('--imgsz', type=int, default=None)
 	parser.add_argument('--channels',type=int, default=3)
@@ -29,7 +33,6 @@ def parser_args():
 	parser.add_argument('--weight-decay', default=1e-4, type=float)
 	parser.add_argument('--device', type=int, default=0)
 	parser.add_argument('--workers', type=int, default=4)
-
 	return parser.parse_args()
 
 def save_checkpoint(state, saved_path, is_best_loss, is_best_acc):
@@ -186,7 +189,7 @@ def train(args):
 		checkpoint = torch.load(args.resume)
 		model.load_state_dict(checkpoint['state_dict'])
 		last_epoch = checkpoint['epoch']
-		print(f"[INFO] Loaded checkpoint '{args.resume}' (at epoch {last_epoch})")
+		print(f"[INFO] Loaded checkpoint {args.resume}. At epoch {last_epoch}.")
 	model.to(device=device, dtype=torch.float)
 	torch.backends.cudnn.benchmark = True
 
@@ -259,6 +262,7 @@ def train(args):
 				'epoch': epoch,
 				'arch': args.arch,
 				'image_size': imgsz,
+				'in_channels': args.channels,
 				'state_dict': model.state_dict(),
 				'optimizer' : optimizer.state_dict(),
 				'nrof_classes': nrof_classes},
@@ -273,6 +277,7 @@ def train(args):
 			'epoch': last_epoch,
 			'arch': args.arch,
 			'image_size': imgsz,
+			'in_channels': args.channels,
 			'state_dict': model.state_dict(),
 			'optimizer' : optimizer.state_dict(),
 			'nrof_classes': nrof_classes},

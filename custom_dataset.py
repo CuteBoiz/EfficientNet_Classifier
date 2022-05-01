@@ -2,13 +2,13 @@
 Preprocess dataset from txt files.
 
 author: phatnt
-date: 2021-08-10
+date: Aug-10-2021
 """
 
 import os 
-import numpy as np
 import cv2
 import torch
+import numpy as np
 
 class CustomDataset(torch.utils.data.Dataset):
 	"""
