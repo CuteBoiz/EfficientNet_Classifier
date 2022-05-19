@@ -2,31 +2,35 @@
 Train efficient-net classifier
 
 author: phatnt
-date: May-01-2022
+date: May-19-2022
 '''
 import os
 import os
-import torch
+import sys
 import shutil
 import argparse
 import numpy as np
+from datetime import date
 
 import torch
 from tqdm.autonotebook import tqdm
-from efficientnet_pytorch import EfficientNet
 import torchvision.transforms as transforms
 from torch.utils.tensorboard import SummaryWriter
 from custom_dataset import CustomDataset, Normalize, ToTensor, Resize
 
+sys.path.append('./efficientnet')
+from model import EfficientNet
+
 def parser_args():
 	parser = argparse.ArgumentParser()
-	parser.add_argument('--data', type=str)
-	parser.add_argument('--imgsz', type=int, default=None)
+	parser.add_argument('--data', type=str, help='path to train/test/val.txt contain folder')
+	parser.add_argument('--imgsz', type=int, default=None, help='Train image size')
 	parser.add_argument('--channels',type=int, default=3)
 	parser.add_argument('--arch', type=int, default=3, help='EfficientNet architechture(0->8)')
 	parser.add_argument('--resume', type=str, default=None, help='Path to resume weight for resume previous-training')
 	parser.add_argument('--epoch', type=int, default=20)
 	parser.add_argument('--batch', type=int, default=16)
+	parser.add_argument('--work-dir', type=str, default=None)
 
 	parser.add_argument('--lr', type=float, default=0.001)
 	parser.add_argument('--momentum', type=float, default=0.9) 
@@ -129,7 +133,7 @@ def train(args):
 	'''
 		Train efficient net.
 	'''
-	
+	today = date.today()
 	assert args.batch > 0, '[ERROR] Batch size must > 0'
 	assert args.epoch > 0, '[ERROR] Max epoch must > 0'
 	assert args.arch >= 0 and args.arch <= 8, '[ERROR] Invalid EfficientNet Architecture (0 -> 8)'
@@ -148,20 +152,36 @@ def train(args):
 	print('[INFO] Training class: ', train_classes)
 
 	# Load model
+	last_epoch = 1
 	if torch.cuda.is_available():
 		device = torch.device("cuda")
 		torch.cuda.set_device(args.device)
 	else:
 		device = torch.device("cpu")
-	model_name = f'efficientnet-b{args.arch}'
+
+	if args.resume:
+		assert os.path.isfile(args.resume), f'[ERROR] Could not found {args.resume}.'
+		print(f"[INFO] Loading checkpoint '{args.resume}'")
+		checkpoint = torch.load(args.resume)
+		model_arch = checkpoint['arch']
+		num_classes = checkpoint['num_classes']
+		in_channels = checkpoint['in_channels']
+	else:
+		model_arch = args.arch
+		in_channels = args.channels
+
+	model_name = f'efficientnet-b{model_arch}'
 	if args.imgsz is None:
-		model = EfficientNet.from_pretrained(model_name, num_classes=num_classes, in_channels=args.channels)
+		model = EfficientNet.from_pretrained(model_name, num_classes=num_classes, in_channels=in_channels)
 		imgsz = model.get_image_size(model_name)
 	else:
 		imgsz = args.imgsz 
 		assert args.imgsz > 0, '[ERROR] Image size must > 0'
-		model = EfficientNet.from_pretrained(model_name, num_classes=num_classes,
-											in_channels=args.channels, image_size=imgsz)
+		model = EfficientNet.from_pretrained(model_name, num_classes=num_classes, in_channels=in_channels, image_size=imgsz)
+	if args.resume:
+		model.load_state_dict(checkpoint['state_dict'])
+		last_epoch = checkpoint['epoch']
+		print(f"[INFO] Loaded checkpoint {args.resume}. At epoch {last_epoch}.")
 
 	# Load data 
 	train_file = os.path.join(args.data, "train.txt")
@@ -182,19 +202,10 @@ def train(args):
 	cls_weights = torch.FloatTensor(cls_weights)
 
 	print('[INFO] Model info:')
-	print(f'\t + Using Efficientnet-b{args.arch}.')
+	print(f'\t + Using {model_name}.')
 	print(f'\t + Input image size: {imgsz} x {imgsz} x {args.channels}.')
 	print(f'\t + Output Classes: {num_classes}.')
 	
-	last_epoch = 1
-	# Resume checkpoints
-	if args.resume:
-		assert os.path.isfile(args.resume), f'[ERROR] Could not found {args.resume}.'
-		print(f"[INFO] Loading checkpoint '{args.resume}'")
-		checkpoint = torch.load(args.resume)
-		model.load_state_dict(checkpoint['state_dict'])
-		last_epoch = checkpoint['epoch']
-		print(f"[INFO] Loaded checkpoint {args.resume}. At epoch {last_epoch}.")
 	model.to(device=device, dtype=torch.float)
 	torch.backends.cudnn.benchmark = True
 
@@ -206,7 +217,7 @@ def train(args):
 	scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=3, verbose=True)
 
 	# Create log and weight saved folder
-	saved_folder_name = os.path.basename(os.path.dirname(args.data))
+	saved_folder_name = f'{today.strftime("%b-%d")}_{os.path.basename(args.data_path)}' if args.work_dir is None else args.work_dir
 	log_dir = os.path.join('./logs/', saved_folder_name)
 	weight_save_dir = os.path.join('./result/', saved_folder_name)
 	os.makedirs(log_dir, exist_ok=True)
@@ -236,11 +247,11 @@ def train(args):
 				targets = sample_batched['target']
 				images = images.to(device=device, dtype=torch.float)
 				targets = targets.to(device=device, dtype=torch.float)
+				optimizer.zero_grad()
 				output = model(images)
 				loss = criterion(output, targets.long())
 				if loss == 0 or not torch.isfinite(loss):
 					continue
-				optimizer.zero_grad()
 				loss.backward()
 				optimizer.step()
 				epoch_loss.append(float(loss))
@@ -266,9 +277,9 @@ def train(args):
 			print(f"[INFO] Epoch {epoch}: Loss: {loss:.5f}, Accuracy: {accuracy:.2f}%")
 			save_checkpoint({
 				'epoch': epoch,
-				'arch': args.arch,
+				'arch': model_arch,
 				'image_size': imgsz,
-				'in_channels': args.channels,
+				'in_channels': in_channels,
 				'state_dict': model.state_dict(),
 				'optimizer' : optimizer.state_dict(),
 				'num_classes': num_classes},
@@ -281,14 +292,13 @@ def train(args):
 		progress_bar.close()
 		save_checkpoint({
 			'epoch': last_epoch,
-			'arch': args.arch,
+			'arch': model_arch,
 			'image_size': imgsz,
-			'in_channels': args.channels,
+			'in_channels': in_channels,
 			'state_dict': model.state_dict(),
 			'optimizer' : optimizer.state_dict(),
 			'num_classes': num_classes},
 			saved_path=weight_save_dir, is_best_loss=False, is_best_acc=False)
-		
 	
 if __name__ == '__main__':
 	args = parser_args()

@@ -7,18 +7,20 @@ date: May-01-2022
 '''
 import os
 import csv
-import shutil
 import cv2
+import sys
+import shutil
 import argparse
 import xlsxwriter
 import numpy as np
 
 import torch
 import torchvision.transforms as transforms
-from efficientnet_pytorch import EfficientNet
 from tqdm.autonotebook import tqdm
 from custom_dataset import CustomDataset, Normalize, ToTensor, Resize
 
+sys.path.append('./efficientnet')
+from model import EfficientNet
 
 def parser_args():
 	parser = argparse.ArgumentParser()

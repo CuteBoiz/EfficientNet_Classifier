@@ -5,9 +5,11 @@ author: phatnt
 date: May-01-2022
 '''
 import os
+import sys
 import torch
 import argparse
-from efficientnet_pytorch import EfficientNet
+sys.path.append('./efficientnet')
+from model import EfficientNet
 
 def parser_args():
 	parser = argparse.ArgumentParser()

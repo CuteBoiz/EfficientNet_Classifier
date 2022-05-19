@@ -2,15 +2,18 @@
 Efficient-net inference on image/video/images folder
 
 author: phatnt
-date: May-01-2022
+date: May-19-2022
 '''
 import os
 import cv2
 import torch
 import glob
+import sys
 import argparse
 import numpy as np
-from efficientnet_pytorch import EfficientNet
+
+sys.path.append('./efficientnet')
+from model import EfficientNet
 
 def parser_args():
     parser = argparse.ArgumentParser()
