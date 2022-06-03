@@ -192,13 +192,17 @@ def create_report(test_file, evaluate_dict, report_save_dir='./'):
 
 	# SHEET 1
 	# sheet 1 fotmat
-	sheet1_column_width = [ ('B', 25), # Model's name
-							('C', 40), # Defect's name
-							('D', 20), # Quantities
-							('E:{}'.format(calculate_exel_char('E', num_classes-1)), 30), # Train classes
+	sheet1_column_width = [ ('B', 15), # Model's name
+							('C', 20), # Defect's name
+							('D', 12), # Quantities
+							('E:{}'.format(calculate_exel_char('E', num_classes-1)), 12), # Train classes
 							('{}:{}'.format(calculate_exel_char('E', num_classes), 
-											calculate_exel_char('E', num_classes+2)), 25)] # Thresholds, Accuracy
+											calculate_exel_char('E', num_classes+2)), 12)] # Thresholds, Accuracy
+
 	set_cols(sheet1, sheet1_column_width)
+	sheet1.set_row(2, 50)
+	sheet1.set_row(3+num_classes, 50)
+
 	for row in range(1, 4):
 		for col in range(1, 7+num_classes):
 			sheet1.write(row, col, '', HEADER)
@@ -280,7 +284,7 @@ def test(args):
 	num_classes = len(train_classes)
 	# Create threshold file
 	if args.thres is None:
-		thres_file = 'thres.csv'
+		thres_file = os.path.join(os.path.join(args.data, 'thres.csv'))
 		csv_file = open(thres_file, 'w', encoding='UTF8')
 		csv_writer = csv.writer(csv_file)
 		for class_name in train_classes:
