@@ -77,9 +77,3 @@ class ToTensor(object):
 		return {'image': torch.from_numpy(image),
 				'path': path,
 				'target': target}
-
-	
-
-
-	
-
