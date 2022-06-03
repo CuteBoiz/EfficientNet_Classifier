@@ -310,7 +310,7 @@ def test(args):
 	data_transforms = transforms.Compose([Resize(imgsz), Normalize(), ToTensor()])
 	data_loader = torch.utils.data.DataLoader(CustomDataset(test_file, data_transforms),
 												batch_size=args.batch_size, shuffle=False,
-												num_workers=args.workers, pin_memory=True)
+												num_workers=args.workers, pin_memory=False)
 
 	model.load_state_dict(checkpoint['state_dict'])
 	model.to(device=device, dtype=torch.float)

@@ -152,7 +152,6 @@ def train(args):
 	print('[INFO] Training class: ', train_classes)
 
 	# Load model
-	last_epoch = 1
 	if torch.cuda.is_available():
 		device = torch.device("cuda")
 		torch.cuda.set_device(args.device)
@@ -166,9 +165,11 @@ def train(args):
 		model_arch = checkpoint['arch']
 		num_classes = checkpoint['num_classes']
 		in_channels = checkpoint['in_channels']
+		last_epoch = checkpoint['epoch']
 	else:
 		model_arch = args.arch
 		in_channels = args.channels
+		last_epoch = 0
 
 	model_name = f'efficientnet-b{model_arch}'
 	if args.imgsz is None:
@@ -180,7 +181,6 @@ def train(args):
 		model = EfficientNet.from_pretrained(model_name, num_classes=num_classes, in_channels=in_channels, image_size=imgsz)
 	if args.resume:
 		model.load_state_dict(checkpoint['state_dict'])
-		last_epoch = checkpoint['epoch']
 		print(f"[INFO] Loaded checkpoint {args.resume}. At epoch {last_epoch}.")
 
 	# Load data 
@@ -192,11 +192,11 @@ def train(args):
 	train_transforms = transforms.Compose([Resize(imgsz), Normalize(), ToTensor()])
 	train_loader = torch.utils.data.DataLoader(CustomDataset(train_file, train_transforms),
 												batch_size=args.batch, shuffle=True,
-												num_workers=args.workers, pin_memory=True, sampler=None)
+												num_workers=args.workers, pin_memory=False, sampler=None)
 	val_transforms = transforms.Compose([Resize(imgsz), Normalize(), ToTensor()])
 	val_loader = torch.utils.data.DataLoader(CustomDataset(valid_file, val_transforms),
 												batch_size=args.batch, shuffle=True,
-												num_workers=args.workers, pin_memory=True)
+												num_workers=args.workers, pin_memory=False)
 	cls_weights = get_class_weight(train_file, num_classes)
 	print("[INFO] Class Weights:", cls_weights)
 	cls_weights = torch.FloatTensor(cls_weights)
@@ -233,7 +233,7 @@ def train(args):
 	best_acc = 0
 	try:
 		for epoch in range(1, max_epoch+1):
-			if epoch <= last_epoch:
+			if epoch < last_epoch:
 				continue
 			model.train()
 			epoch_loss = []
@@ -257,9 +257,7 @@ def train(args):
 				epoch_loss.append(float(loss))
 				progress_bar.set_description( f"Epoch: {epoch}/{max_epoch}. Loss: {loss:.5f}.")
 				progress_bar.update(1)
-
 			scheduler.step(np.mean(epoch_loss))
-			
 			accuracy = evaluate(val_loader, model, device)
 			current_lr = optimizer.param_groups[0]['lr']
 			writer.add_scalar('Training Loss', loss, epoch * len(train_loader) + i)
