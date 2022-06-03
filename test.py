@@ -235,12 +235,14 @@ def create_report(test_file, evaluate_dict, report_save_dir='./'):
 		sheet2.set_row(2+count, 200)
 		if false_defect['predicted_label'] < num_classes: 
 			predicted_class = train_classes[false_defect['predicted_label']]
-			predicted_score = false_defect['gt_score']
+			predicted_score = false_defect['highest_score']
+			predicted_text = f'{predicted_class.upper()}\n({predicted_score*100:.3f}%)'
 		else:
 			predicted_class = 'Unknown'
+			predicted_text = f'{predicted_class.upper()}'
 		gt_class = train_classes[false_defect['gt_label']]
-		gt_text = f'{gt_class.upper()}\n({predicted_score*100:.3f}%)'
-		predicted_text = f'{predicted_class.upper()}\n({predicted_score*100:.3f}%)'
+		gt_score = false_defect['gt_score']
+		gt_text = f'{gt_class.upper()}\n({gt_score*100:.3f}%)'
 		
 		sheet2_content1 = [count+1, 'image', gt_text, predicted_text, false_defect['image_path']]
 		sheet2.write_row(2+count, 1, sheet2_content1, NORMAL)
