@@ -24,24 +24,27 @@ def export(args):
     '''
         Export pytorch weight to onnx engine.
     '''
-    print("[INFO] Exporting {args.weight} to Onnx engine.")
+    print(f"[INFO] Exporting {args.weight} to Onnx engine.")
     assert args.batch > 0
     assert os.path.isfile(args.weight), f'[ERROR] {args.weight} not found!'
 
     checkpoint = torch.load(args.weight, map_location='cpu')
     imgsz = checkpoint['image_size']
+    in_channels = checkpoint["in_channels"]
     model = EfficientNet.from_name(f'efficientnet-b{checkpoint["arch"]}', num_classes=checkpoint['num_classes'],
-                                    image_size=imgsz, in_channels=checkpoint["in_channels"])
+                                    image_size=imgsz, in_channels=in_channels)
     
     print('[INFO] Model info:')
     print(f'\t + Architecture:  EfficientNet-b{checkpoint["arch"]}')
-    print(f'\t + Input shape: {args.batch} x 3 x {imgsz} x {imgsz}')
+    print(f'\t + Max batch size: {args.batch}')
+    print(f'\t + Input shape: {args.batch} x {in_channels} x {imgsz} x {imgsz}')
     print(f'\t + Ouput shape: {checkpoint["num_classes"]}')
+    
 
     model.load_state_dict(checkpoint['state_dict'])
     model.set_swish(memory_efficient=False)
     model.eval()
-    dummy_input = torch.randn(args.batch, 3, imgsz, imgsz, requires_grad=True)
+    dummy_input = torch.randn(args.batch, in_channels, imgsz, imgsz, requires_grad=True)
     saved_name = args.name if args.name is not None else args.weight.replace('.pth', '.onnx')
     torch.onnx.export(model, dummy_input, saved_name,
                     opset_version = args.opset,

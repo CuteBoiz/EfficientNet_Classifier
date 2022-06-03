@@ -1,6 +1,6 @@
 # EficientNet_Classifier
 
-## <div align="center"> I. TRAIN. </div>
+## <div align="center"> I. Train EfficientNet Classifier. </div>
 
 ```sh
 python3 train.py
@@ -12,6 +12,7 @@ python3 train.py
 |-----------|------|---------|------
 
 - **Data path example:**
+
 ```sh
 DataPath
 |
@@ -20,7 +21,9 @@ DataPath
 |__valid.txt
 |__label.txt
 ```
+
 - **train/valid/test.txt files:**
+
 ```sh
 "path/to/image" class_id
 "path/to/image1.png" 0
@@ -34,8 +37,7 @@ dog
 cat
 ```
 
-
-## <div align="center"> II. RUN TEST SET AND EXPORT RESULT TO EXCEL FILE. </div>
+## <div align="center"> II. Run test set and visualize result onto excel file. </div>
 
 ```sh
 python3 test.py
@@ -47,7 +49,7 @@ python3 test.py
 |-----------|------|---------|------
 
 
-## <div align="center"> III. INFERENCE MODEL ON IMAGE/VIDEO/IMAGES FOLDER. </div>
+## <div align="center"> III. Inference on image/video/images folder. </div>
 
 ```sh
 python3 infer.py
@@ -59,7 +61,7 @@ python3 infer.py
 |-----------|------|---------|------
 
 
-## <div align="center"> IV. EXPORT ONNX. </div>
+## <div align="center"> IV. Export to ONNX engine. </div>
 
 ```sh
 python3 export.py
