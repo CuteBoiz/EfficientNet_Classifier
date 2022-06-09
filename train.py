@@ -161,7 +161,7 @@ def train(args):
 	if args.resume:
 		assert os.path.isfile(args.resume), f'[ERROR] Could not found {args.resume}.'
 		print(f"[INFO] Loading checkpoint '{args.resume}'")
-		checkpoint = torch.load(args.resume)
+		checkpoint = torch.load(args.resume, map_location=device)
 		model_arch = checkpoint['arch']
 		num_classes = checkpoint['num_classes']
 		in_channels = checkpoint['in_channels']
