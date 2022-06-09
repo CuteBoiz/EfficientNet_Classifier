@@ -217,7 +217,7 @@ def train(args):
 	scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=3, verbose=True)
 
 	# Create log and weight saved folder
-	saved_folder_name = f'{today.strftime("%b-%d")}_{os.path.basename(args.data_path)}' if args.work_dir is None else args.work_dir
+	saved_folder_name = f'{today.strftime("%b-%d")}_{os.path.basename(args.data)}' if args.work_dir is None else args.work_dir
 	log_dir = os.path.join('./logs/', saved_folder_name)
 	weight_save_dir = os.path.join('./result/', saved_folder_name)
 	os.makedirs(log_dir, exist_ok=True)
@@ -264,10 +264,10 @@ def train(args):
 			writer.add_scalar('Training Learning rate', current_lr, epoch)
 			writer.add_scalar('Training Accuracy', accuracy, epoch)
 			
-			if (loss < best_loss):
+			if (loss <= best_loss):
 				best_loss = loss
 				is_best_loss = True
-			if (accuracy > best_acc):
+			if (accuracy >= best_acc):
 				best_acc = accuracy
 				is_best_acc = True
 			writer.close()
