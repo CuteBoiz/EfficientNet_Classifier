@@ -278,8 +278,6 @@ def train(args):
 				'state_dict': model.state_dict(),
 				'optimizer' : optimizer.state_dict()},
 				saved_path=weight_save_dir, is_best_loss=is_best_loss, is_best_acc=is_best_acc)
-			is_best_loss = False
-			is_best_acc = False
 			last_epoch = epoch
 	except KeyboardInterrupt:
 		writer.close()
