@@ -46,7 +46,7 @@ def save_checkpoint(state, saved_path, is_best_loss, is_best_acc):
 			state: torch state dict.
 			saved_path: model saved place.
 			is_best_loss: is this model reach lowest loss?
-			is_best_acc: is this model reach highest accuracy on valid set?
+			is_best_acc: is this model reach highest accuracy on val set?
 	'''
 	assert state is not None, '[ERROR]: state dict is none!'
 	os.makedirs(saved_path, exist_ok=True)
@@ -63,12 +63,12 @@ def get_class_weight(train_file, num_classes):
 		Get class weight array. In order to deal with imbalance dataset.
 		Args: 
 			train_file: txt file with format ("image_path", label_id) each line.
-			nrof_classes: number of training classes.
+			num_classes: number of training classes.
 		Return:
-			An class weight array (length = nrof_classes)
+			An class weight array (length = num_classes)
 	'''
 	assert os.path.isfile(train_file), '[ERROR]: {} not found!'.format(train_file)
-	assert isinstance(num_classes, int) and num_classes >= 0, '[ERROR]: nrof_classes is not valid!'
+	assert isinstance(num_classes, int) and num_classes >= 0, '[ERROR]: num_classes is invalid!'
 	
 	# Count quantity of each class
 	class_quantities = np.zeros(num_classes, dtype=np.int32)
@@ -139,7 +139,7 @@ def train(args):
 	assert args.arch >= 0 and args.arch <= 8, '[ERROR] Invalid EfficientNet Architecture (0 -> 8)'
 	assert os.path.isdir(args.data), f'[ERROR] Could not found {args.data}. Or not a directory!'
 	
-	# Load label
+	# Load label file
 	label_file = os.path.join(args.data, "label.txt") 
 	assert os.path.isfile(label_file), f'[ERROR] Could not found label.txt in {args.data}'
 	train_classes = []
@@ -183,33 +183,30 @@ def train(args):
 		model.load_state_dict(checkpoint['state_dict'])
 		print(f"[INFO] Loaded checkpoint {args.resume}. At epoch {last_epoch}.")
 
-	# Load data 
+	# Load dataset 
 	train_file = os.path.join(args.data, "train.txt")
-	valid_file = os.path.join(args.data, "val.txt")
+	val_file = os.path.join(args.data, "val.txt")
 	assert os.path.isfile(train_file), f'[ERROR] Could not found train.txt in {args.data}'
-	assert os.path.isfile(valid_file), f'[ERROR] Could not found val.txt in {args.data}'
-	
+	assert os.path.isfile(val_file), f'[ERROR] Could not found val.txt in {args.data}'
 	train_transforms = transforms.Compose([Resize(imgsz), Normalize(), ToTensor()])
 	train_loader = torch.utils.data.DataLoader(CustomDataset(train_file, train_transforms),
 												batch_size=args.batch, shuffle=True,
 												num_workers=args.workers, pin_memory=False, sampler=None)
 	val_transforms = transforms.Compose([Resize(imgsz), Normalize(), ToTensor()])
-	val_loader = torch.utils.data.DataLoader(CustomDataset(valid_file, val_transforms),
+	val_loader = torch.utils.data.DataLoader(CustomDataset(val_file, val_transforms),
 												batch_size=args.batch, shuffle=True,
 												num_workers=args.workers, pin_memory=False)
 	cls_weights = get_class_weight(train_file, num_classes)
-	print("[INFO] Class Weights:", cls_weights)
-	cls_weights = torch.FloatTensor(cls_weights)
-
 	print('[INFO] Model info:')
 	print(f'\t + Using {model_name}.')
 	print(f'\t + Input image size: {imgsz} x {imgsz} x {args.channels}.')
 	print(f'\t + Output Classes: {num_classes}.')
-	
+	print('\t + Class Weights: ', cls_weights)
 	model.to(device=device, dtype=torch.float)
 	torch.backends.cudnn.benchmark = True
 
-	# Loss & Optimizer
+	# Loss & Optimizer define
+	cls_weights = torch.FloatTensor(cls_weights)
 	criterion = torch.nn.CrossEntropyLoss(weight=cls_weights).to(device=device, dtype=torch.float)
 	optimizer = torch.optim.SGD(model.parameters(), args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
 	if args.resume:
@@ -226,7 +223,7 @@ def train(args):
 	print(f'[INFO] Log Dirs: {log_dir} Created!')
 	print(f'[INFO] Weights Dirs: {weight_save_dir} Created')
 	
-	# Train
+	# Train model
 	init_lr = args.lr
 	max_epoch = args.epoch
 	best_loss = 1e5
@@ -241,7 +238,6 @@ def train(args):
 			is_best_acc = False
 			adjust_learning_rate(optimizer, epoch, init_lr)
 			progress_bar = tqdm(total=len(train_loader))
-
 			for i, sample_batched in enumerate(train_loader):
 				images = sample_batched['image']
 				targets = sample_batched['target']
@@ -278,9 +274,9 @@ def train(args):
 				'arch': model_arch,
 				'image_size': imgsz,
 				'in_channels': in_channels,
+				'num_classes': num_classes,
 				'state_dict': model.state_dict(),
-				'optimizer' : optimizer.state_dict(),
-				'num_classes': num_classes},
+				'optimizer' : optimizer.state_dict()},
 				saved_path=weight_save_dir, is_best_loss=is_best_loss, is_best_acc=is_best_acc)
 			is_best_loss = False
 			is_best_acc = False
@@ -293,9 +289,9 @@ def train(args):
 			'arch': model_arch,
 			'image_size': imgsz,
 			'in_channels': in_channels,
+			'num_classes': num_classes,
 			'state_dict': model.state_dict(),
-			'optimizer' : optimizer.state_dict(),
-			'num_classes': num_classes},
+			'optimizer' : optimizer.state_dict()},
 			saved_path=weight_save_dir, is_best_loss=False, is_best_acc=False)
 	
 if __name__ == '__main__':

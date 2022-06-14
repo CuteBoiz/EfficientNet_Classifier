@@ -29,7 +29,7 @@ def parser_args():
 	parser.add_argument('--thres', type=str, default=None)
 	parser.add_argument('--device', type=int, default=0)
 	parser.add_argument('--workers', type=int, default=4)
-	parser.add_argument('--batch_size', type=int, default=32)
+	parser.add_argument('--batch', type=int, default=32)
 	return parser.parse_args()
 
 def softmax(x):
@@ -119,7 +119,6 @@ def get_cofusion_matrix(evaluate_dict):
 	for i in range(num_classes):
 		count+=result_matrix[i][i]
 	accuracy = (count/np.sum(result_matrix))*100
-	
 	print('New thresholds:', new_thresholds)
 	return accuracy, result_matrix, false_defects, underkill, overkill
 
@@ -315,7 +314,7 @@ def test(args):
 
 	data_transforms = transforms.Compose([Resize(imgsz), Normalize(), ToTensor()])
 	data_loader = torch.utils.data.DataLoader(CustomDataset(test_file, data_transforms),
-												batch_size=args.batch_size, shuffle=False,
+												batch_size=args.batch, shuffle=False,
 												num_workers=args.workers, pin_memory=False)
 
 	model.load_state_dict(checkpoint['state_dict'])
